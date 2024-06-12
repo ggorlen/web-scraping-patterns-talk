@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Web Scraping Patterns and Anti-Patterns</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+
+      figcaption {
+        font-size: 0.6em;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Web Scraping Patterns (and Anti-Patterns)
+
+### Greg Gorlen
+
+<figure>
+<img alt="Eat this, not that" src="https://upload.wikimedia.org/wikipedia/en/b/b3/ETNT_Original.jpg">
+  <figcaption>Credit: <a href="https://en.wikipedia.org/wiki/Eat_This%2C_Not_That#/media/File:ETNT_Original.jpg">Wikipedia</a></figcaption>
+</figure>
+
+#### [Browser Conference](https://www.browserconference.com/talks/web-scraping-patterns-and-antipatterns/), 20 June 2024, 3 PM PDT
+
+[GitHub source](https://www.github.com/ggorlen/web-scraping-patterns-talk)
+
+---
+
+# Agenda
+
+1. What's this talk about?
+1. whoami
+1. Defining terms
+1. The patterns (and antipatterns)
+1. Recap (skip here if you need a 1 slide TL;DR)
+1. Questions?
+
+---
+
+# What's this talk about?
+
+Patterns and antipatterns\* in...
+
+- Playwright (Node.js)
+- Puppeteer
+- Web scraping
+- Testing
+- Browser automation
+
+Some familiarity with this tech will be assumed.
+
+<small>\* In the tradition of [this blog post](https://kentcdodds.com/blog/common-mistakes-with-react-testing-library), for example (or the Drake meme).</small>
+
+<small>\** This talk is for educational purposes. Scrape responsibly.
+
+---
+
+# `$ whoami`
+
+- Full stack software engineer based in San Francisco, CA
+  - currently [Qualified.io](https://www.qualified.io/)\*
+      - we also do [Codewars](https://www.codewars.com)
+- Generalist
+  - freelancing
+  - teaching
+  - writing
+  - experimenting
+- Avid Q&amp;A participant
+  - [Stack Overflow](https://stackoverflow.com/users/6243352/ggorlen)
+  - [Codementor](https://www.codementor.io/@ggorlen)
+  - ... [Codidact](https://software.codidact.com/users/56855)?
+- Fan of
+  - quality assurance/testing
+  - web scraping
+  - userscripts
+  - ...
+
+<small>\* Disclaimer: my views are my own</small>
+
+---
+
+# Defining Terms: Patterns ✅
+
+Patterns are common idioms, ways of doing things in a language or framework that are usually good.
+
+---
+
+# Defining Terms: Antipatterns ❌
+
+Antipatterns are common idioms, ways of doing things in a language or framework that are usually suboptimal.
+
+Not exactly _wrong_, per se.
+
+---
+
+class: center, middle
+
+# On to the patterns ...
+
+---
+
+## ❌ Sleeping
+
+- Never the _right_ amount of time
+    - Sometimes doesn't wait long enough
+    - Sometimes waits too long
+- "Flaky" (testing lingo)
+- [Discouraged](https://playwright.dev/docs/api/class-page#page-wait-for-timeout) in Playwright
+- [Removed](https://stackoverflow.com/a/77078430/6243352) in Puppeteer
+
+## ✅ Using a precise predicate
+
+- locators
+- `page.waitForSelector()`
+- `page.waitForFunction()`
+- `page.waitForResponse()`
+- `page.waitForURL()`
+- ...
+
+<small>[Read more](https://stackoverflow.com/a/73676564/6243352)</small>
+
+---
+
+## ❌ Not using `"domcontentloaded"`
+
+- `"load"`
+    - Waits for initial set of resources
+    - Can get stuck (see [this weird case](https://stackoverflow.com/questions/78490582/why-is-playwright-screenshot-timing-out-with-waiting-for-fonts-to-load/78490782?noredirect=1#comment138481703_78490782))
+    - Default predicate (poor design?)
+- `"networkidle"`
+    - Waits for even more resources, then sleeps for 500ms
+    - Can get stuck
+    - Slow, pessimistic, too general, flaky
+    - OK-ish for PDF generation and screenshots.
+
+## ✅ Using `"domcontentloaded"`
+
+- Only waits for the HTML file
+- Doesn't get stuck
+- Quickest navigation resolver in Puppeteer
+- `"commit"` is even faster in Playwright!
+
+<small>[Read more](https://serpapi.com/blog/puppeteer-antipatterns/#never-using-domcontentloaded)</small>
+
+---
+
+## ❌ Using `{timeout: 0}` on navs
+
+- Can hang the script forever
+- No stack trace
+- Hard to debug
+- Sign of desperation
+
+## ✅ Using `{timeout: 120_000}`
+
+- Throw, catch, log and retry operation
+- Or log the error for the maintainer to fix and crash
+- Caveat: some Pupp/PW stack traces are hard to understand and debug (and the error names change every few versions just because). Next talk...?
+
+<small>[Read more](https://blog.appsignal.com/2023/02/08/puppeteer-in-nodejs-common-mistakes-to-avoid.html#using-infinite-timeouts)</small>
+
+---
+
+## ❌ Not blocking resources (CSS, fonts, GA, etc)
+
+- Don't need 'em if you're scraping text
+- Slow
+- Can get stuck
+- Not nice to the server
+
+## ✅ Blocking resources
+
+- Speeds up the code!
+- If the page is static, disable JS!
+- A bit more code to write
+- Less useful in testing
+
+<small>[Read more](https://serpapi.com/blog/puppeteer-antipatterns/#not-blocking-images-and-resources)</small>
+
+---
+
+### ❌ Element Handles
+
+```js
+const titleHandles = await page.$$(".title");
+const textContents = [];
+
+for (const el of titleHandles) {
+  textContents.push(await el.evaluate(el => el.textContent));
+}
+```
+
+### ✅ `$$eval` (in Puppeteer)
+
+```js
+const textContents = await page.$$eval(
+  ".title",
+  elements => elements.map(el => el.textContent)
+);
+```
+
+### ✅ `locators` (in Playwright)
+
+```js
+const textContents = await page.locator(".title").allTextContents();
+```
+
+<small>[Read more](https://stackoverflow.com/a/77597068/6243352)</small>
+
+---
+
+## ❌ Scraping the DOM
+
+- Liable to change
+- Timing issues
+- Visibility issues
+- Other selection issues (Tailwind? Shadow DOM? IFrames?)
+- Data is often formatted weirdly
+- ...All right, sometimes you have to
+
+## ✅ Intercepting network requests or scraping JSON
+
+- More likely to be stable
+- Faster code execution
+- Gets you raw, unformatted data
+- ...But not always feasible
+
+<small>[Read more](https://stackoverflow.com/a/76023261/6243352)</small>
+
+---
+
+### ❌ Using browser automation on static sites
+
+- Overkill
+- ...Sometimes necessary if you're detected
+
+### ✅ Using `fetch` + Cheerio on static sites
+
+```js
+fetch(url)
+  .then(res => res.text())
+  .then(html => {
+    const $ = cheerio.load(html);
+    const data = [...$("table")].map(e =>
+      [...$(e).find("tr:has(td)")].map(e =>
+        [...$(e).find("td")].map(e => $(e).text().trim())
+      )
+    );
+    console.table(data);
+  })
+  .catch(err => console.error(err));
+```
+
+- Lightweight, fast, easier (synchronous) coding, fewer deps
+- Potentially more reliable
+- Gets you raw, unformatted data
+- ...But not always feasible
+
+<small>(I have [dozens](https://stackoverflow.com/a/78376148/6243352) of examples of speedups replacing Cheerio with Puppeteer)</small>
+
+---
+
+## ❌ Using trusted clicks when scraping
+
+```js
+const el = await page.$eval(".foo", el => el.click());
+await el.click()
+```
+
+- No obligation to act like a user when scraping
+- Can get stuck due to visibility checks
+    - Button is under cookie banner? Timeout!
+- Makes you want to use evil Element Handles in Puppeteer
+- Use in testing, though (we want to act like a user)
+
+## ✅ Using untrusted clicks when scraping
+
+```js
+await page.waitForSelector(".foo");
+await el.evaluate(el => el.click());
+```
+
+- Way more reliable
+- No visibility/actionability checks
+    - Button is under cookie banner? No prob.
+- Avoid in testing (we want to act like a user)
+
+<small>[Read more](https://stackoverflow.com/a/78376148/6243352)</small>
+
+---
+
+## ❌ Clicking to navigate when scraping
+
+```js
+const navP = page.waitForNavigation({waitUntil: "domcontentloaded"});
+await page.click(".btn-that-goes-to-next-page");
+await navP; // should be waiting for a selector on the next page anyway...
+```
+
+- Avoid the DOM--it's a common source of failure
+- No obligation to act like a user when scraping
+    - (The oppsite is true when testing--act like the user)
+- Avoid element handles
+- Also avoid `page.back()`
+
+## ✅ Using `page.goto()` when scraping
+
+```js
+await page.goto("URL for the next page", {waitUntil: "domcontentloaded"});
+```
+
+- Way more reliable
+- No visibility/actionability checks
+- Avoid in testing (we want to act like a user)
+
+<small>[Read more](https://blog.appsignal.com/2023/06/14/puppeteer-in-nodejs-more-antipatterns-to-avoid.html#adding-premature-abstractions#underusing-pagegoto)</small>
+
+---
+
+## ❌ Dismissing cookie banners with `.click()`
+
+- Avoid the DOM when scraping
+- No obligation to act like a user when scraping
+    - (The oppsite is true when testing--act like the user)
+
+## ✅ Rip out cookie banners with `.remove()`
+
+- Just blast away the cookie banner
+- No visibility/actionability checks
+- Avoid annoying animations
+- Avoid in testing (we want to act like a user)
+
+<small>[Read more](https://stackoverflow.com/a/78414695/6243352)</small>
+
+---
+
+## ❌ Using `.filter` (Playwright-specific)
+
+```js
+// from https://stackoverflow.com/a/73216189/6243352
+page
+  .locator(`[aria-controls=${table_id}]`)
+  .filter({ has: page.locator(`text="${page_number}"`) });
+```
+
+General principle: nesting bad.
+
+## ✅ Chaining locators
+
+```js
+// from https://stackoverflow.com/a/75553716/6243352
+page
+  .locator(`[aria-controls="${tableId}"]`)
+  .getByText(pageNumber, {exact: true});
+```
+
+---
+
+#### ❌ Using `.locator`
+
+- Not specific enough
+- Makes you want to use CSS or XPath (not user-visible)
+
+#### ❌ Using `.getByText`
+
+- OK-ish--at least it's user visible
+- `getByRole` is better because it also specifies the role
+
+#### ❌ Using `.getByTestId`
+
+- OK-ish--at least it's specific
+- Pollutes the code with `data-testid="..."` attrs everywhere
+- Not user-visible
+
+#### ✅ Using `.getByRole`
+
+- Specify both text/placeholder/value and element with unified syntax
+- User-visible
+
+(This has to do more with testing--use whatever seems most reliable for a particular site if you're scraping)
+
+---
+
+## ❌ Using `page.on` to get one response
+
+- Easy to [leak listeners](https://stackoverflow.com/a/74660359/6243352)
+- Callback-based
+- General principle: nesting bad
+- Useful for monitoring all requests
+
+## ✅ Using `.waitForResponse`/`.waitForRequest`
+
+- Promise based, nice and flat, control flow stays in a chain
+
+---
+
+## ❌ Not taking advantage of the API
+
+- Still selecting text with XPath (already covered)
+- Traversing shadow DOMs by hand
+- Using `page.$` and family (element handles)
+
+## ✅ Using new features (Puppeteer)
+
+- `::-p-text(foobar)` to select text (`text/foobar` was cool but now is "legacy")
+- `>>>` to traverse the shadow DOM
+- Maybe non-experimental locators someday? In the meantime, `page.waitForSelector()` with `page.$$eval()` handles 90% of the work.
+
+## ✅ Using new features (Playwright)
+
+- Heed the warnings in the docs!
+
+---
+
+## ❌ Using XPath
+
+- Nasty syntax, usually unnecessary, leads to many bugs
+- No longer necessary for text content scraping (use `::-p-text()` in Pupp, `textContent()` in PW)
+
+## ✅ Using `::-p-`/CSS selectors (in Puppeteer)
+
+- Great for scraping, if chosen carefully (see next slide)
+- Pupp locators are still experimental at the moment
+
+## ✅ Using `getByRole` (in Playwright)
+
+- Great for testing
+
+---
+
+#### ❌ Using long path or CSS chains
+
+- Really brittle:
+
+    ```js
+    "#answer-60796572 > div > div.answercell > div.s-prose.js-post-body > pre"
+    ```
+  
+#### ✅ Using short CSS selectors (in scraping/Pupp)
+
+- Better (assuming it's enough to disambiguate the element):
+
+    ```js
+    "#answer-60796572 .js-post-body pre"
+    ```
+- Difficult to choose properly. Find the right balance:
+  - Precise enough that it's unlikely to match the wrong thing (_false positive_)
+  - Loose enough that it doesn't assume a rigid DOM structure that's liable to break (_false negative_)
+
+#### ✅ Using `getByRole` (in testing/PW)
+
+- ...or one of the many other Playwright location best practices
+
+---
+
+#### ❌ Using CSS attribute selectors unnecessarily
+
+- Really brittle:
+
+    ```js
+    '[class="foo"]'
+    ```
+- This is too precise (prone to false negatives)
+- This won't match `<p class="foo bar"></p>`
+- Occasionally useful, like matching
+    ```html
+    <p class="foo-17da983d49324bd"></p>
+    ```
+    with `'[class^=foo-]'`.
+  
+#### ✅ Using CSS `.` syntax
+
+- Better:
+
+    ```js
+    ".foo"
+    ```
+
+- This will match
+
+    ```html
+    <p class="foo bar"></p>
+    ```
+
+---
+
+## ❌ Mixing `await`/`then`
+
+- Not just Pupp/PW but since these libs are heavily async, tends to show up here
+- [Hall of Shame](https://stackoverflow.com/a/75785234/6243352) of collected problems this has caused, too many to list here
+- General principle: nesting bad.
+
+## ✅ Just use `await`
+
+Nuff said
+
+---
+
+### ❌ Overusing `networkidle`
+
+- Already mentioned, slow, unreliable, pessimistic and has a sleep
+
+### ✅ Use specific predicates
+
+- `waitForResponse`, `waitForSelector`, `waitForFunction`... precise!
+- See [this example](https://stackoverflow.com/questions/57364320/puppeteers-setcontent-function-not-making-network-requests-for-static-files/78594844#78594844) that gives a 2x speedup for screenshots/PDF gen
+
+    ```js
+    const loaded = Promise.all([
+      page.waitForResponse(e =>
+        e.url() === "https://unpkg.com/hack@0.8.1/dist/dark-grey.css"
+      ),
+      page.waitForResponse(e => e.url() === "https://picsum.photos/100/100"),
+      page.waitForFunction("!!window.axios"),
+      page.waitForSelector("p::-p-text(Leanne Graham)"),
+    ]);
+    await page.goto(url, {waitUntil: "domcontentloaded"}});
+    await loaded;
+    await page.evaluate(`
+      Promise.all([...document.querySelectorAll("img")].map(e => e.decode()))
+    `);
+    ```
+- Downsides: verbose, a bit more work, not as general
+
+---
+
+## ❌ Using overly-general methods
+
+```js
+await page.evaluate(() => {
+  const elements = document.querySelectorAll(".foo-bar");
+  return [...elements].map((el) => el.textContent.trim());
+});
+```
+
+## ✅ Using the right tool for the job
+
+```js
+// Puppeteer
+await page.$$eval(".foo-bar", (elements) => {
+  return elements.map((el) => el.textContent.trim());
+});
+```
+
+```js
+// Playwright
+await page.locator(".foo-bar").allTextContents();
+```
+
+Might seem trivial, but this applies to so many parts of the API and magnifies.
+
+<small>[Read more](https://blog.appsignal.com/2023/06/14/puppeteer-in-nodejs-more-antipatterns-to-avoid.html#not-using-specific-wait-or-evaluate-methods)</small>
+
+---
+
+## ❌ Not cleaning up the browser
+
+```js
+const browser = await puppeteer.launch();
+// ...
+await browser.close();
+```
+
+Simple, but if an error is thrown, the process won't exit.
+
+## ✅ Cleaning up the browser
+
+```js
+let browser;
+try {
+  browser = await puppeteer.launch();
+  // ...
+} catch (err) {
+  console.error(err);
+} finally {
+  await browser?.close();
+}
+```
+
+Verbose but correct.
+
+<small>[Read more](https://blog.appsignal.com/2023/06/14/puppeteer-in-nodejs-more-antipatterns-to-avoid.html#not-cleaning-up-browser-and-page-handles-with-finally)</small>
+
+---
+
+## ❌ Not using `userDataDir`
+
+- Keep having to log in again and again, possibly with 2FA
+
+## ✅ Using `userDataDir`
+
+- Login (by hand, even), maybe with 2FA and save state
+- Less code, great for whipping up a scrape quickly
+
+---
+
+## ❌ Trying to rewrite working browser code in Puppeteer when scraping
+
+- You usually start in the browser console
+- Wind up in element handle/async hell trying to rewrite
+- Code stops being portable (browser DOM can run anywhere and will always be relevant to be able to write)
+
+## ✅ Using Puppeteer as a lightweight wrapper on browser DOM manipulation
+
+- If it already works, use it (plop into an `evaluate`)
+- Throw in waits where necessary
+- Scraping only!
+- Caveat: sometimes you need trusted events or better application design than a dump of browser code.
+  - incrementally take advantage of Puppeteer idioms where appropriate
+  - and/or organize the browser code better
+
+---
+
+## ❌ Writing premature abstractions
+
+- Applies to both scraping and testing
+- Often too clever
+- Tends to make correctness harder to establish--too many problems at once
+
+## ✅ Abstracting only when motivation arrives
+
+- Generally good advice
+- A bit of duplication can be OK
+- Abstractions have a cost
+- Find the "right", clearly-motivated abstraction
+- [AHA! Testing](https://kentcdodds.com/blog/aha-testing) (Kent)
+- [Avoid nesting when testing](https://kentcdodds.com/blog/avoid-nesting-when-youre-testing) (Kent again)
+- [Factoring your code](https://grugbrain.dev/#grug-on-factring-your-code) (Grug)
+
+---
+
+### ❌ Assuming there's a silver bullet
+
+- Common question: How do I scrape any website?
+  - Many variants like:
+       - [When is the page completely loaded?](https://stackoverflow.com/questions/52497252/puppeteer-wait-until-page-is-completely-loaded/72535642#72535642)
+       - [How to pick a selector?](https://stackoverflow.com/questions/73917113/convenient-way-to-get-input-for-puppeteer-page-click/73928661#73928661)
+- Answer: it's hard. Websites throw a different curveball every time.
+- If we could do this, libraries wouldn't bother with all the beating around the bush and would just give us a `scrapeAnyPagePerfectly(url)` function.
+- LLMs haven't solved the problem.
+
+### ✅ Writing site-specific code
+
+- Sorry, generally there's no choice. Just gotta do it the hard way.
+- Playwright codegen helps a bit but also not a silver bullet.
+
+### ✅ Generalizing based on use case
+
+- For example, using [Moz Readability](https://news.ycombinator.com/item?id=39504105) can scrape most text-based pages pretty well (useful for RAGs).
+- For tables there are one-shots, e.g. `pandas.read_html()`.
+
+---
+
+# Recap
+
+**When scraping**...
+- No obligation to act like a user
+- No obligation to adhere to user-visible selectors or events
+- Avoid the DOM when scraping
+- "Cheating" is often good
+
+**When testing**...
+- Do the opposite of everything above.
+
+**In both cases**:
+- Auto waiting is good
+- Flatter is better
+- Avoid premature abstractions
+
+**Puppeteer**: generating PDFs, screenshots, scraping. Simpler API, fewer distractions, less need to be user-visible, less opinionated.
+
+**Playwright**: testing, assertions. More opinionated/adheres to best practices.
+
+---
+
+class: center, middle
+
+# Questions?
+
+---
+
+# Thanks!
+
+- Browser Conference
+- AppSignal
+- SerpAPI
+- the Stack Overflow community
+- My colleagues at Qualified.io
+- Contributors to open source technologies mentioned here
+- My partner Emily
+
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>

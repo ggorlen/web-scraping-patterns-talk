@@ -281,7 +281,6 @@ const el = await page.$eval(".foo", el => el.click());
 await el.click()
 ```
 
-- No obligation to act like a user when scraping
 - Can get stuck due to visibility checks
     - Button is under cookie banner? Timeout!
 - Makes you want to use evil Element Handles in Puppeteer
@@ -294,6 +293,7 @@ await page.waitForSelector(".foo");
 await el.evaluate(el => el.click());
 ```
 
+- General principle: No obligation to act like a user when scraping
 - Way more reliable
 - No visibility/actionability checks
     - Button is under cookie banner? No prob.
@@ -312,8 +312,6 @@ await navP; // should be waiting for a selector on the next page anyway...
 ```
 
 - Avoid the DOM--it's a common source of failure
-- No obligation to act like a user when scraping
-    - (The oppsite is true when testing--act like the user)
 - Avoid element handles
 - Also avoid `page.back()`
 
@@ -323,6 +321,8 @@ await navP; // should be waiting for a selector on the next page anyway...
 await page.goto("URL for the next page", {waitUntil: "domcontentloaded"});
 ```
 
+- General principle: No obligation to act like a user when scraping
+- General principle: Avoid the DOM when scraping
 - Way more reliable
 - No visibility/actionability checks
 - Avoid in testing (we want to act like a user)
@@ -333,16 +333,16 @@ await page.goto("URL for the next page", {waitUntil: "domcontentloaded"});
 
 ## ❌ Dismissing cookie banners with `.click()`
 
-- Avoid the DOM when scraping
-- No obligation to act like a user when scraping
-    - (The oppsite is true when testing--act like the user)
+- Timing problems, nondeterminism and flakiness
 
 ## ✅ Rip out cookie banners with `.remove()`
 
+- General principle: No obligation to act like a user when scraping
+- General principle: Avoid the DOM when scraping
 - Just blast away the cookie banner
 - No visibility/actionability checks
 - Avoid annoying animations
-- Avoid in testing (we want to act like a user)
+- Feel free to rip out other annoying parts of the page
 
 <small>[Read more](https://stackoverflow.com/a/78414695/6243352)</small>
 
@@ -391,15 +391,15 @@ page
 - Specify both text/placeholder/value and element with unified syntax
 - User-visible
 
-(This has to do more with testing--use whatever seems most reliable for a particular site if you're scraping)
+(This has to do more with testing--use whatever seems most reliable for a particular site if you're scraping... but you're probably using Puppeteer for scraping anyway)
 
 ---
 
 ## ❌ Using `page.on` to get one response
 
+- General principle: nesting bad
 - Easy to [leak listeners](https://stackoverflow.com/a/74660359/6243352)
 - Callback-based
-- General principle: nesting bad
 - Useful for monitoring all requests
 
 ## ✅ Using `.waitForResponse`/`.waitForRequest`
@@ -417,7 +417,7 @@ page
 ## ✅ Using new features (Puppeteer)
 
 - `::-p-text(foobar)` to select text (`text/foobar` was cool but now is "legacy")
-- `>>>` to traverse the shadow DOM
+- `&gt;&gt;&gt;` to traverse the shadow DOM
 - Maybe non-experimental locators someday? In the meantime, `page.waitForSelector()` with `page.$$eval()` handles 90% of the work.
 
 ## ✅ Using new features (Playwright)
@@ -428,12 +428,12 @@ page
 
 ## ❌ Using XPath
 
-- Nasty syntax, usually unnecessary, leads to many bugs
+- Nasty syntax, usually unnecessary, hard to maintain
 - No longer necessary for text content scraping (use `::-p-text()` in Pupp, `textContent()` in PW)
 
 ## ✅ Using `::-p-`/CSS selectors (in Puppeteer)
 
-- Great for scraping, if chosen carefully (see next slide)
+- Fine for scraping, if chosen carefully (see next slide)
 - Pupp locators are still experimental at the moment
 
 ## ✅ Using `getByRole` (in Playwright)
@@ -447,7 +447,7 @@ page
 - Really brittle:
 
     ```js
-    "#answer-60796572 > div > div.answercell > div.s-prose.js-post-body > pre"
+    "#answer-60796572 &gt; div &gt; div.answercell &gt; div.s-prose.js-post-body &gt; pre"
     ```
   
 #### ✅ Using short CSS selectors (in scraping/Pupp)
@@ -504,9 +504,9 @@ page
 - [Hall of Shame](https://stackoverflow.com/a/75785234/6243352) of collected problems this has caused, too many to list here
 - General principle: nesting bad.
 
-## ✅ Just use `await`
+## ❌ Using `.then` instead of `await` in Puppeteer/PW
 
-Nuff said
+## ✅ Just use `await`
 
 ---
 
@@ -575,7 +575,7 @@ const browser = await puppeteer.launch();
 await browser.close();
 ```
 
-Simple, but if an error is thrown, the process won't exit.
+Easy to write, but if an error is thrown, the process won't exit.
 
 ## ✅ Cleaning up the browser
 
@@ -600,6 +600,7 @@ Verbose but correct.
 ## ❌ Not using `userDataDir`
 
 - Keep having to log in again and again, possibly with 2FA
+- Not nice to the server
 
 ## ✅ Using `userDataDir`
 
@@ -670,7 +671,7 @@ Verbose but correct.
 **When scraping**...
 - No obligation to act like a user
 - No obligation to adhere to user-visible selectors or events
-- Avoid the DOM when scraping
+- Avoid the DOM
 - "Cheating" is often good
 
 **When testing**...

@@ -301,7 +301,7 @@ await el.click();
 #### ✅ Using untrusted clicks when scraping
 
 ```js
-await page.waitForSelector(".foo");
+const el = await page.waitForSelector(".foo");
 await el.evaluate(el =&gt; el.click());
 ```
 
